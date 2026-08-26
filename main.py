@@ -96,4 +96,4 @@ while True:
         time.sleep(10)
     except Exception as e:
         print("Loop Error:", e)
-        time.sleep(10)
+        time.sleep(60)
