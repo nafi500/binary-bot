@@ -1,6 +1,10 @@
 from flask import Flask
 import threading
 import os
+import time
+import requests
+import pandas as pd
+import numpy as np
 
 app = Flask(__name__)
 
@@ -13,13 +17,9 @@ def run_web():
     app.run(host='0.0.0.0', port=port)
 
 threading.Thread(target=run_web, daemon=True).start()
-import time
-import requests
-import pandas as pd
-import numpy as np
 
 # --- TELEGRAM CONFIG ---
-BOT_TOKEN =  "8758337374:AAEWM-sRhg0nAUTSnCP0xodU7S-hm7mHIkw"
+BOT_TOKEN = "8758337374:AAEWM-sRhg0nAUTSnCP0xodU7S-hm7mHIkw"
 CHAT_ID = "6764734331"
 
 def send_telegram(msg):
@@ -49,51 +49,58 @@ def get_indicators(df):
     low_min = df['low'].rolling(window=5).min()
     high_max = df['high'].rolling(window=5).max()
     df['stoch_k'] = 100 * ((df['close'] - low_min) / (high_max - low_min))
-    df['stoch_d'] = df['stoch_k'].rolling(window=3).mean()
 
     return df
 
-# --- FETCH CANDLE DATA FROM DERIV API ---
-def fetch_candles(symbol="frxEURUSD"):
-    url = f"https://api.deriv.com/api/v1/candles?symbol={symbol}&granularity=60&count=50"
+# --- FETCH CANDLE DATA FROM BINANCE (Reliable API) ---
+def fetch_candles(symbol="EURUSDT"):
+    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1m&limit=50"
     try:
         res = requests.get(url).json()
-        if "candles" in res:
-            df = pd.DataFrame(res["candles"])
+        if isinstance(res, list) and len(res) > 0:
+            data = []
+            for item in res:
+                data.append({
+                    'epoch': item[0],
+                    'open': float(item[1]),
+                    'high': float(item[2]),
+                    'low': float(item[3]),
+                    'close': float(item[4])
+                })
+            df = pd.DataFrame(data)
             return get_indicators(df)
     except Exception as e:
-        print("Data Error:", e)
+        print("Data Fetch Error:", e)
     return None
 
 # --- MAIN LOOP ---
 print("Bot Started...")
-send_telegram("🚀 *Binary Option Signal Bot Active!*")
+send_telegram("🚀 *Binary Option Signal Bot Active! Scanning Market...*")
 
 last_signal_time = 0
 
 while True:
     try:
-        df = fetch_candles()
+        df = fetch_candles("EURUSDT")
         if df is not None and len(df) > 2:
             latest = df.iloc[-1]
-            prev = df.iloc[-2]
-
-            # Signal Conditions
-            call_cond = (latest['close'] <= latest['lower_bb']) and (latest['rsi'] < 30) and (latest['stoch_k'] < 20)
-            put_cond = (latest['close'] >= latest['upper_bb']) and (latest['rsi'] > 70) and (latest['stoch_k'] > 80)
+            
+            # Optimized Signal Conditions (Easier Trigger)
+            call_cond = (latest['close'] <= latest['lower_bb']) or (latest['rsi'] < 35 and latest['stoch_k'] < 25)
+            put_cond = (latest['close'] >= latest['upper_bb']) or (latest['rsi'] > 65 and latest['stoch_k'] > 75)
 
             curr_time = latest['epoch']
             if curr_time != last_signal_time:
                 if call_cond:
-                    msg = f"🟢 *BINARY CALL SIGNAL*\n📌 Asset: EUR/USD\n⏱ Expiry: 1 MIN\n🎯 Pattern: Oversold Reversal"
+                    msg = f"🟢 *BINARY CALL SIGNAL*\n📌 Asset: EUR/USD\n⏱ Expiry: 1 MIN\n📊 Price: {latest['close']}\n🎯 Pattern: Oversold Reversal"
                     send_telegram(msg)
                     last_signal_time = curr_time
                 elif put_cond:
-                    msg = f"🔴 *BINARY PUT SIGNAL*\n📌 Asset: EUR/USD\n⏱ Expiry: 1 MIN\n🎯 Pattern: Overbought Reversal"
+                    msg = f"🔴 *BINARY PUT SIGNAL*\n📌 Asset: EUR/USD\n⏱ Expiry: 1 MIN\n📊 Price: {latest['close']}\n🎯 Pattern: Overbought Reversal"
                     send_telegram(msg)
                     last_signal_time = curr_time
 
-        time.sleep(10)
+        time.sleep(60) # Checks every 1 minute
     except Exception as e:
         print("Loop Error:", e)
         time.sleep(60)
