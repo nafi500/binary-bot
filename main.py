@@ -52,7 +52,7 @@ def get_indicators(df):
 
     return df
 
-# --- FETCH CANDLE DATA FROM BINANCE (Reliable API) ---
+# --- FETCH CANDLE DATA FROM BINANCE ---
 def fetch_candles(symbol="EURUSDT"):
     url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1m&limit=50"
     try:
@@ -85,22 +85,22 @@ while True:
         if df is not None and len(df) > 2:
             latest = df.iloc[-1]
             
-            # Optimized Signal Conditions (Easier Trigger)
-            call_cond = (latest['close'] <= latest['lower_bb']) or (latest['rsi'] < 35 and latest['stoch_k'] < 25)
-            put_cond = (latest['close'] >= latest['upper_bb']) or (latest['rsi'] > 65 and latest['stoch_k'] > 75)
+            # RSI Strategy (35 / 65)
+            call_cond = latest['rsi'] <= 35
+            put_cond = latest['rsi'] >= 65
 
             curr_time = latest['epoch']
             if curr_time != last_signal_time:
                 if call_cond:
-                    msg = f"🟢 *BINARY CALL SIGNAL*\n📌 Asset: EUR/USD\n⏱ Expiry: 1 MIN\n📊 Price: {latest['close']}\n🎯 Pattern: Oversold Reversal"
+                    msg = f"🟢 *BINARY CALL SIGNAL*\n📌 Asset: EUR/USD\n⏱ Expiry: 1 MIN\n📊 Price: {latest['close']}\n🎯 RSI: {round(latest['rsi'], 2)}"
                     send_telegram(msg)
                     last_signal_time = curr_time
                 elif put_cond:
-                    msg = f"🔴 *BINARY PUT SIGNAL*\n📌 Asset: EUR/USD\n⏱ Expiry: 1 MIN\n📊 Price: {latest['close']}\n🎯 Pattern: Overbought Reversal"
+                    msg = f"🔴 *BINARY PUT SIGNAL*\n📌 Asset: EUR/USD\n⏱ Expiry: 1 MIN\n📊 Price: {latest['close']}\n🎯 RSI: {round(latest['rsi'], 2)}"
                     send_telegram(msg)
                     last_signal_time = curr_time
 
-        time.sleep(60) # Checks every 1 minute
+        time.sleep(30) # Checks every 30 seconds
     except Exception as e:
         print("Loop Error:", e)
-        time.sleep(60)
+        time.sleep(30)
