@@ -19,7 +19,7 @@ import pandas as pd
 import numpy as np
 
 # --- TELEGRAM CONFIG ---
-BOT_TOKEN = "758337374:AAEWM-sRhg0nAUTSnCP0xodU7S-hm7mHIkw"
+BOT_TOKEN =  "8758337374:AAEWM-sRhg0nAUTSnCP0xodU7S-hm7mHIkw"
 CHAT_ID = "6764734331"
 
 def send_telegram(msg):
