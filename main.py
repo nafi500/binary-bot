@@ -85,9 +85,9 @@ while True:
         if df is not None and len(df) > 2:
             latest = df.iloc[-1]
             
-            # RSI Strategy (35 / 65)
-            call_cond = latest['rsi'] <= 35
-            put_cond = latest['rsi'] >= 65
+            # Fast Signal Conditions (RSI 45 / 55)
+            call_cond = latest['rsi'] <= 45
+            put_cond = latest['rsi'] >= 55
 
             curr_time = latest['epoch']
             if curr_time != last_signal_time:
