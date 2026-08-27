@@ -31,7 +31,7 @@ def send_telegram(msg):
     except Exception as e:
         print("Telegram Error:", e)
 
-# --- ACCURATE RSI CALCULATION ---
+# --- ACCURATE RSI CALCULATION (WILDER'S SMOOTHING) ---
 def get_rsi(df, window=14):
     delta = df['close'].diff()
     gain = delta.where(delta > 0, 0.0)
@@ -42,7 +42,7 @@ def get_rsi(df, window=14):
     df['rsi'] = 100 - (100 / (1 + rs))
     return df
 
-# --- FETCH CANDLE DATA ---
+# --- FETCH CANDLE DATA FROM BINANCE ---
 def fetch_candles(symbol="EURUSDT"):
     url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1m&limit=100"
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -66,8 +66,7 @@ def fetch_candles(symbol="EURUSDT"):
 
 # --- MAIN LOOP ---
 print("Bot Started...")
-# Startup Message
-send_telegram("🚀 *Bot Updated! Connecting to Telegram...*")
+send_telegram("🚀 *Nafi Trade Bot Active! Scanning Market...*")
 
 last_signaled_candle = 0
 
@@ -80,12 +79,12 @@ while True:
             rsi_val = round(latest['rsi'], 2)
 
             if curr_candle_time != last_signaled_candle:
-                # Signal Triggers (45 / 55)
-                if rsi_val <= 45:
+                # Fast Test Trigger (RSI 48 / 52)
+                if rsi_val <= 48:
                     msg = f"🟢 *BINARY CALL SIGNAL*\n📌 Asset: EUR/USD\n⏱ Expiry: 1 MIN\n📊 Price: {latest['close']}\n🎯 RSI: {rsi_val}"
                     send_telegram(msg)
                     last_signaled_candle = curr_candle_time
-                elif rsi_val >= 55:
+                elif rsi_val >= 52:
                     msg = f"🔴 *BINARY PUT SIGNAL*\n📌 Asset: EUR/USD\n⏱ Expiry: 1 MIN\n📊 Price: {latest['close']}\n🎯 RSI: {rsi_val}"
                     send_telegram(msg)
                     last_signaled_candle = curr_candle_time
