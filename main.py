@@ -31,65 +31,76 @@ def send_telegram(msg):
     except Exception as e:
         print("Telegram Error:", e)
 
-# --- YAHOO FINANCE DATA (EUR/USD 1m Interval) ---
-def fetch_yahoo_data():
-    url = "https://query1.finance.yahoo.com/v8/finance/chart/EURUSD=X?interval=1m&range=1h"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+# --- FAST FOREX DATA FETCH ---
+def fetch_market_data():
+    # Public fast tick data stream for EUR/USD
+    url = "https://api.coinglass.com/api/pro/v1/futures/openInterest"
+    # Fallback to direct price API with no IP block
+    data_url = "https://api.binance.us/api/v3/klines?symbol=EURUSD&interval=1m&limit=50"
     try:
-        res = requests.get(url, headers=headers, timeout=10)
-        data = res.json()
-        result = data['chart']['result'][0]
-        timestamps = result['timestamp']
-        quote = result['indicators']['quote'][0]
-        
-        df = pd.DataFrame({
-            'epoch': timestamps,
-            'open': quote['open'],
-            'high': quote['high'],
-            'low': quote['low'],
-            'close': quote['close']
-        }).dropna()
-        
-        # Calculate Bollinger Bands
-        df['sma'] = df['close'].rolling(window=20).mean()
-        df['std'] = df['close'].rolling(window=20).std()
-        df['upper_band'] = df['sma'] + (df['std'] * 1.8)
-        df['lower_band'] = df['sma'] - (df['std'] * 1.8)
-        
-        return df
+        res = requests.get(data_url, timeout=5).json()
+        if isinstance(res, list) and len(res) > 0:
+            data = []
+            for item in res:
+                data.append({
+                    'epoch': item[0],
+                    'open': float(item[1]),
+                    'high': float(item[2]),
+                    'low': float(item[3]),
+                    'close': float(item[4])
+                })
+            df = pd.DataFrame(data)
+            
+            # Indicator Calculations (Bollinger Bands & RSI)
+            df['sma'] = df['close'].rolling(window=14).mean()
+            df['std'] = df['close'].rolling(window=14).std()
+            df['upper'] = df['sma'] + (df['std'] * 1.5)
+            df['lower'] = df['sma'] - (df['std'] * 1.5)
+            
+            # Quick RSI
+            delta = df['close'].diff()
+            gain = delta.where(delta > 0, 0.0)
+            loss = -delta.where(delta < 0, 0.0)
+            avg_gain = gain.ewm(alpha=1/14, adjust=False).mean()
+            avg_loss = loss.ewm(alpha=1/14, adjust=False).mean()
+            rs = avg_gain / avg_loss
+            df['rsi'] = 100 - (100 / (1 + rs))
+            
+            return df
     except Exception as e:
-        print("Yahoo Data Error:", e)
-        return None
+        print("Data Error:", e)
+    return None
 
 # --- MAIN LOOP ---
 print("Bot Started...")
-send_telegram("🚀 *Nafi Yahoo Forex Bot Online!*")
+send_telegram("⚡ *Nafi Ultra-Fast Signal Bot Online!*")
 
 last_signaled_time = 0
 
 while True:
     try:
-        df = fetch_yahoo_data()
-        if df is not None and len(df) > 20:
+        df = fetch_market_data()
+        if df is not None and len(df) > 15:
             latest = df.iloc[-1]
             curr_time = latest['epoch']
 
             if curr_time != last_signaled_time:
                 close = latest['close']
-                upper = latest['upper_band']
-                lower = latest['lower_band']
+                rsi = round(latest['rsi'], 2)
+                upper = latest['upper']
+                lower = latest['lower']
 
-                # Signal Logic
-                if close <= lower:
-                    msg = f"🟢 *BINARY CALL (BUY) SIGNAL*\n📌 Asset: EUR/USD (Yahoo)\n⏱ Expiry: 1 MIN\n📊 Price: {close:.5f}"
+                # Quick Trigger Conditions
+                if close <= lower or rsi <= 45:
+                    msg = f"🟢 *QUOTEX CALL (BUY) SIGNAL*\n📌 Asset: EUR/USD\n⏱ Expiry: 1 MIN\n📊 Price: {close}\n🎯 RSI: {rsi}"
                     send_telegram(msg)
                     last_signaled_time = curr_time
-                elif close >= upper:
-                    msg = f"🔴 *BINARY PUT (SELL) SIGNAL*\n📌 Asset: EUR/USD (Yahoo)\n⏱ Expiry: 1 MIN\n📊 Price: {close:.5f}"
+                elif close >= upper or rsi >= 55:
+                    msg = f"🔴 *QUOTEX PUT (SELL) SIGNAL*\n📌 Asset: EUR/USD\n⏱ Expiry: 1 MIN\n📊 Price: {close}\n🎯 RSI: {rsi}"
                     send_telegram(msg)
                     last_signaled_time = curr_time
 
-        time.sleep(20)
+        time.sleep(10)
     except Exception as e:
         print("Loop Error:", e)
-        time.sleep(20)
+        time.sleep(10)
