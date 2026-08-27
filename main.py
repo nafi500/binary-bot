@@ -1,4 +1,4 @@
-from flask import Flask
+ from flask import Flask
 import threading
 import os
 import time
@@ -32,24 +32,11 @@ def send_telegram(msg):
 
 # --- INDICATORS CALCULATION ---
 def get_indicators(df):
-    # RSI (14)
     delta = df['close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rs = gain / loss
     df['rsi'] = 100 - (100 / (1 + rs))
-
-    # Bollinger Bands (20, 2)
-    df['sma20'] = df['close'].rolling(window=20).mean()
-    df['std'] = df['close'].rolling(window=20).std()
-    df['upper_bb'] = df['sma20'] + (df['std'] * 2)
-    df['lower_bb'] = df['sma20'] - (df['std'] * 2)
-
-    # Stochastic Oscillator (5,3,3)
-    low_min = df['low'].rolling(window=5).min()
-    high_max = df['high'].rolling(window=5).max()
-    df['stoch_k'] = 100 * ((df['close'] - low_min) / (high_max - low_min))
-
     return df
 
 # --- FETCH CANDLE DATA FROM BINANCE ---
@@ -77,30 +64,30 @@ def fetch_candles(symbol="EURUSDT"):
 print("Bot Started...")
 send_telegram("🚀 *Binary Option Signal Bot Active! Scanning Market...*")
 
-last_signal_time = 0
+last_checked_time = 0
 
 while True:
     try:
         df = fetch_candles("EURUSDT")
         if df is not None and len(df) > 2:
             latest = df.iloc[-1]
-            
-            # Fast Signal Conditions (RSI 45 / 55)
-            call_cond = latest['rsi'] <= 45
-            put_cond = latest['rsi'] >= 55
-
             curr_time = latest['epoch']
-            if curr_time != last_signal_time:
-                if call_cond:
-                    msg = f"🟢 *BINARY CALL SIGNAL*\n📌 Asset: EUR/USD\n⏱ Expiry: 1 MIN\n📊 Price: {latest['close']}\n🎯 RSI: {round(latest['rsi'], 2)}"
-                    send_telegram(msg)
-                    last_signal_time = curr_time
-                elif put_cond:
-                    msg = f"🔴 *BINARY PUT SIGNAL*\n📌 Asset: EUR/USD\n⏱ Expiry: 1 MIN\n📊 Price: {latest['close']}\n🎯 RSI: {round(latest['rsi'], 2)}"
-                    send_telegram(msg)
-                    last_signal_time = curr_time
 
-        time.sleep(30) # Checks every 30 seconds
+            # Check signal only ONCE per new candle
+            if curr_time != last_checked_time:
+                rsi_val = round(latest['rsi'], 2)
+                
+                # RSI Conditions (45 / 55)
+                if latest['rsi'] <= 45:
+                    msg = f"🟢 *BINARY CALL SIGNAL*\n📌 Asset: EUR/USD\n⏱ Expiry: 1 MIN\n📊 Price: {latest['close']}\n🎯 RSI: {rsi_val}"
+                    send_telegram(msg)
+                elif latest['rsi'] >= 55:
+                    msg = f"🔴 *BINARY PUT SIGNAL*\n📌 Asset: EUR/USD\n⏱ Expiry: 1 MIN\n📊 Price: {latest['close']}\n🎯 RSI: {rsi_val}"
+                    send_telegram(msg)
+
+                last_checked_time = curr_time
+
+        time.sleep(15) # Check every 15 seconds for quick response
     except Exception as e:
         print("Loop Error:", e)
-        time.sleep(30)
+        time.sleep(15)            
