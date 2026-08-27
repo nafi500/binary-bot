@@ -26,29 +26,28 @@ def send_telegram(msg):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}
     try:
-        requests.post(url, json=payload)
+        res = requests.post(url, json=payload)
+        print("Telegram Send Status:", res.status_code)
     except Exception as e:
         print("Telegram Error:", e)
 
-# --- ACCURATE RSI (WILDER'S SMOOTHING) ---
+# --- ACCURATE RSI CALCULATION ---
 def get_rsi(df, window=14):
     delta = df['close'].diff()
     gain = delta.where(delta > 0, 0.0)
     loss = -delta.where(delta < 0, 0.0)
-    
-    # Exponential Weighted Moving Average for Accurate RSI
     avg_gain = gain.ewm(alpha=1/window, adjust=False).mean()
     avg_loss = loss.ewm(alpha=1/window, adjust=False).mean()
-    
     rs = avg_gain / avg_loss
     df['rsi'] = 100 - (100 / (1 + rs))
     return df
 
-# --- FETCH CANDLE DATA FROM BINANCE ---
+# --- FETCH CANDLE DATA ---
 def fetch_candles(symbol="EURUSDT"):
     url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1m&limit=100"
+    headers = {"User-Agent": "Mozilla/5.0"}
     try:
-        res = requests.get(url).json()
+        res = requests.get(url, headers=headers, timeout=10).json()
         if isinstance(res, list) and len(res) > 0:
             data = []
             for item in res:
@@ -67,7 +66,8 @@ def fetch_candles(symbol="EURUSDT"):
 
 # --- MAIN LOOP ---
 print("Bot Started...")
-send_telegram("🚀 *Binary Option Bot Updated & Active! Scanning...*")
+# Startup Message
+send_telegram("🚀 *Bot Updated! Connecting to Telegram...*")
 
 last_signaled_candle = 0
 
@@ -75,12 +75,12 @@ while True:
     try:
         df = fetch_candles("EURUSDT")
         if df is not None and len(df) > 15:
-            # Get the last completed candle (index -2) or live candle (index -1)
             latest = df.iloc[-1]
             curr_candle_time = latest['epoch']
             rsi_val = round(latest['rsi'], 2)
 
             if curr_candle_time != last_signaled_candle:
+                # Signal Triggers (45 / 55)
                 if rsi_val <= 45:
                     msg = f"🟢 *BINARY CALL SIGNAL*\n📌 Asset: EUR/USD\n⏱ Expiry: 1 MIN\n📊 Price: {latest['close']}\n🎯 RSI: {rsi_val}"
                     send_telegram(msg)
@@ -90,7 +90,7 @@ while True:
                     send_telegram(msg)
                     last_signaled_candle = curr_candle_time
 
-        time.sleep(20)
+        time.sleep(15)
     except Exception as e:
         print("Loop Error:", e)
-        time.sleep(20)
+        time.sleep(15)
